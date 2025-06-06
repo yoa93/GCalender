@@ -12,18 +12,32 @@
     h1 {
       font-size: 1.5rem;
     }
-    h3 {
-      margin-top: 1rem;
-      font-weight: bold;
-    }
-    ul {
-      padding-left: 1.2rem;
-    }
     .controls {
       margin-bottom: 1rem;
     }
     label {
       margin-right: 1rem;
+    }
+    .time-block {
+      margin-top: 1rem;
+      border-top: 1px solid #ccc;
+      padding-top: 0.5rem;
+    }
+    .time-title {
+      font-weight: bold;
+      margin-bottom: 0.25rem;
+    }
+    .person-row {
+      display: flex;
+      align-items: center;
+      padding: 2px 0;
+    }
+    .person-name {
+      width: 140px;
+      font-weight: bold;
+    }
+    .person-summary {
+      flex: 1;
     }
   </style>
 </head>
@@ -52,6 +66,85 @@
       loadSchedule(groupEmail, selectedDate);
     });
 
+    function formatDateWithWeekday(dateStr) {
+      const date = new Date(dateStr);
+      const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+      return `${date.getMonth() + 1}月${date.getDate()}日(${weekdays[date.getDay()]})`;
+    }
+
+    function formatTimeRange(start, end) {
+      const startDate = new Date(start);
+      const endDate = new Date(end);
+      const pad = (n) => n.toString().padStart(2, '0');
+      return `${pad(startDate.getHours())}:${pad(startDate.getMinutes())}〜${pad(endDate.getHours())}:${pad(endDate.getMinutes())}`;
+    }
+
+    function renderResult(data) {
+      console.log("📦 GAS JSONP response:", data);
+      const loading = document.getElementById("loading");
+      if (data.error) {
+        loading.textContent = `取得失敗: ${data.error}`;
+        return;
+      }
+
+      const scheduleList = document.getElementById("scheduleList");
+      scheduleList.innerHTML = "";
+
+      const timeSlots = {};
+
+      data.calendars.forEach(user => {
+        user.events.forEach(ev => {
+          const range = formatTimeRange(ev.start, ev.end);
+          if (!timeSlots[range]) timeSlots[range] = [];
+          timeSlots[range].push({
+            name: user.name || user.email,
+            summary: ev.summary,
+            location: ev.location || ""
+          });
+        });
+      });
+
+      const dateStr = document.getElementById("datePicker").value;
+      const title = document.createElement("h2");
+      title.textContent = formatDateWithWeekday(dateStr);
+      scheduleList.appendChild(title);
+
+      if (Object.keys(timeSlots).length === 0) {
+        scheduleList.innerHTML += '<p>予定なし</p>';
+      } else {
+        Object.keys(timeSlots).sort().forEach(range => {
+          const block = document.createElement("div");
+          block.className = "time-block";
+
+          const timeTitle = document.createElement("div");
+          timeTitle.className = "time-title";
+          timeTitle.textContent = range;
+          block.appendChild(timeTitle);
+
+          timeSlots[range].forEach(ev => {
+            const row = document.createElement("div");
+            row.className = "person-row";
+
+            const name = document.createElement("div");
+            name.className = "person-name";
+            name.textContent = ev.name;
+
+            const summary = document.createElement("div");
+            summary.className = "person-summary";
+            summary.textContent = `${ev.summary}${ev.location ? " @ " + ev.location : ""}`;
+
+            row.appendChild(name);
+            row.appendChild(summary);
+            block.appendChild(row);
+          });
+
+          scheduleList.appendChild(block);
+        });
+      }
+
+      loading.style.display = "none";
+    }
+
     function loadSchedule(group, date) {
       document.getElementById("loading").style.display = "block";
       document.getElementById("loading").textContent = "読み込み中...";
@@ -67,35 +160,6 @@
       script.src = url;
       script.id = "jsonpScript";
       document.body.appendChild(script);
-    }
-
-    function renderResult(data) {
-      console.log("📦 GAS JSONP response:", data);
-      const loading = document.getElementById("loading");
-      if (data.error) {
-        loading.textContent = `取得失敗: ${data.error}`;
-        return;
-      }
-
-      const scheduleList = document.getElementById("scheduleList");
-      scheduleList.innerHTML = "";
-
-      data.calendars.forEach(user => {
-        const div = document.createElement("div");
-        div.innerHTML = `<h3>${user.email}</h3>`;
-        if (user.events.length === 0) {
-          div.innerHTML += "<p>予定なし</p>";
-        } else {
-          const ul = document.createElement("ul");
-          user.events.forEach(ev => {
-            ul.innerHTML += `<li>${ev.start}〜${ev.end}：${ev.summary}${ev.location ? " @ " + ev.location : ""}</li>`;
-          });
-          div.appendChild(ul);
-        }
-        scheduleList.appendChild(div);
-      });
-
-      loading.style.display = "none";
     }
 
     document.addEventListener("DOMContentLoaded", () => {
