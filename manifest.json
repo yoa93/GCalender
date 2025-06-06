@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Google Group Schedule Viewer",
+  "version": "1.0",
+  "description": "指定したGoogleグループの予定を日付指定で一覧表示",
+  "permissions": [
+    "identity",
+    "tabs",
+    "storage"
+  ],
+  "oauth2": {
+    "client_id": "338708307001-7jni885etd54d3o2tjtuj4e20bv47kmr.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/calendar.readonly",
+      "https://www.googleapis.com/auth/admin.directory.group.readonly",
+      "https://www.googleapis.com/auth/admin.directory.group.member.readonly"
+    ]
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "host_permissions": [
+    "https://www.googleapis.com/"
+  ]
+}
