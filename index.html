@@ -93,11 +93,12 @@
       const timeSlots = {};
 
       data.calendars.forEach(user => {
+        const displayName = user.name || user.email;
         user.events.forEach(ev => {
           const range = formatTimeRange(ev.start, ev.end);
           if (!timeSlots[range]) timeSlots[range] = [];
           timeSlots[range].push({
-            name: user.name || user.email,
+            name: displayName,
             summary: ev.summary,
             location: ev.location || ""
           });
@@ -127,7 +128,7 @@
 
             const name = document.createElement("div");
             name.className = "person-name";
-            name.textContent = ev.name;
+            name.textContent = ev.name || ev.email;
 
             const summary = document.createElement("div");
             summary.className = "person-summary";
