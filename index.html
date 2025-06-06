@@ -106,6 +106,8 @@
       white-space: normal;
       cursor: pointer;
       min-height: 45px;
+      max-height: 80px;
+      overflow: hidden;
     }
     
     .event-time {
@@ -123,6 +125,9 @@
       border-top: 1px solid rgba(255,255,255,0.3);
       padding-top: 2px;
       line-height: 1.2;
+      max-height: 25px;
+      overflow: hidden;
+      word-break: break-all;
     }
     
     .no-events {
@@ -143,7 +148,7 @@
   <h1>グループ予定一覧</h1>
 
   <div class="controls">
-    <label>グループアドレス：<input type="text" id="groupInput" placeholder="group@domain.com"></label>
+    <label>グループアドレス：<input type="text" id="groupInput" value="home_consultant@sho-ei.net"></label>
     <label>日付を選択：<input type="date" id="datePicker"></label>
     <button id="reloadBtn">再読み込み</button>
   </div>
@@ -297,13 +302,23 @@
                 titleDiv.textContent = event.summary;
                 eventDiv.appendChild(titleDiv);
                 
-                // 詳細表示（2文まで）
+                // 詳細表示（2文まで、URLなど長い文字列を制限）
                 if (event.description) {
                   const detailsDiv = document.createElement("div");
                   detailsDiv.className = "event-details";
                   
                   // 詳細を改行で分割し、最初の2文を取得
-                  const sentences = event.description.split(/[。\n]/).filter(s => s.trim());
+                  let sentences = event.description.split(/[。\n]/).filter(s => s.trim());
+                  
+                  // URLや長い文字列をフィルタリング
+                  sentences = sentences.filter(s => {
+                    // URLを除外
+                    if (s.includes('http') || s.includes('www.')) return false;
+                    // 50文字以上の文章を除外
+                    if (s.length > 50) return false;
+                    return true;
+                  });
+                  
                   const displayDetails = sentences.slice(0, 2).join('。');
                   if (displayDetails) {
                     detailsDiv.textContent = displayDetails + (sentences.length > 2 ? '。' : '');
