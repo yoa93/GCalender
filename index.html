@@ -7,37 +7,122 @@
   <style>
     body {
       font-family: sans-serif;
-      margin: 2rem;
+      margin: 1rem;
+      font-size: 12px;
     }
     h1 {
       font-size: 1.5rem;
+      margin-bottom: 1rem;
     }
     .controls {
       margin-bottom: 1rem;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 5px;
     }
-    label {
+    .controls label {
       margin-right: 1rem;
     }
-    .time-block {
-      margin-top: 1rem;
-      border-top: 1px solid #ccc;
-      padding-top: 0.5rem;
+    .controls input, .controls button {
+      margin: 5px;
+      padding: 5px;
     }
-    .time-title {
+    
+    .schedule-container {
+      overflow-x: auto;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    
+    .schedule-grid {
+      display: table;
+      min-width: 100%;
+      background: white;
+    }
+    
+    .grid-header {
+      display: table-row;
+      background: #f8f9fa;
       font-weight: bold;
-      margin-bottom: 0.25rem;
     }
-    .person-row {
-      display: flex;
-      align-items: center;
-      padding: 2px 0;
+    
+    .grid-row {
+      display: table-row;
     }
-    .person-name {
-      width: 140px;
+    
+    .grid-row:nth-child(even) {
+      background: #f9f9f9;
+    }
+    
+    .grid-cell {
+      display: table-cell;
+      border: 1px solid #e0e0e0;
+      padding: 4px 8px;
+      vertical-align: top;
+      position: relative;
+      min-height: 40px;
+      width: 80px;
+    }
+    
+    .name-cell {
+      width: 120px;
+      background: #fff;
       font-weight: bold;
+      position: sticky;
+      left: 0;
+      z-index: 10;
+      border-right: 2px solid #ddd;
     }
-    .person-summary {
-      flex: 1;
+    
+    .time-header {
+      text-align: center;
+      font-size: 11px;
+      background: #f0f0f0;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+    
+    .name-header {
+      position: sticky;
+      left: 0;
+      top: 0;
+      z-index: 15;
+      background: #e9ecef;
+      text-align: center;
+    }
+    
+    .event-item {
+      background: #007bff;
+      color: white;
+      padding: 2px 4px;
+      margin: 1px 0;
+      border-radius: 3px;
+      font-size: 10px;
+      line-height: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    
+    .event-item:hover {
+      background: #0056b3;
+      white-space: normal;
+      word-wrap: break-word;
+    }
+    
+    .no-events {
+      color: #6c757d;
+      font-style: italic;
+      text-align: center;
+      padding: 20px;
+    }
+    
+    #loading {
+      text-align: center;
+      padding: 20px;
+      color: #6c757d;
     }
   </style>
 </head>
@@ -51,10 +136,21 @@
   </div>
 
   <p id="loading">読み込み中...</p>
-  <div id="scheduleList"></div>
+  <div id="scheduleContainer" class="schedule-container" style="display: none;">
+    <div id="scheduleGrid" class="schedule-grid"></div>
+  </div>
 
   <script>
     const endpoint = "https://script.google.com/a/macros/sho-ei.net/s/AKfycbxkWcWduNlZcSMY0r31FkjdxZXjHaXwJDc_PraTXV_mm77P9a8-Epk2vrXRRqDrBFJhwA/exec";
+
+    // 時間スロットを生成（7:00-20:00）
+    function generateTimeSlots() {
+      const slots = [];
+      for (let hour = 7; hour <= 20; hour++) {
+        slots.push(hour.toString().padStart(2, '0') + ':00');
+      }
+      return slots;
+    }
 
     document.getElementById("reloadBtn").addEventListener("click", () => {
       const groupEmail = document.getElementById("groupInput").value.trim();
@@ -72,84 +168,134 @@
       return `${date.getMonth() + 1}月${date.getDate()}日(${weekdays[date.getDay()]})`;
     }
 
-    function formatTimeRange(start, end) {
-      const startDate = new Date(start);
-      const endDate = new Date(end);
-      const pad = (n) => n.toString().padStart(2, '0');
-      return `${pad(startDate.getHours())}:${pad(startDate.getMinutes())}〜${pad(endDate.getHours())}:${pad(endDate.getMinutes())}`;
+    function getEventTimeSlot(eventStart, eventEnd) {
+      const start = new Date(eventStart);
+      const end = new Date(eventEnd);
+      return {
+        startHour: start.getHours(),
+        endHour: end.getHours(),
+        startMinute: start.getMinutes(),
+        endMinute: end.getMinutes()
+      };
     }
 
     function renderResult(data) {
       console.log("📦 GAS JSONP response:", data);
       const loading = document.getElementById("loading");
+      const container = document.getElementById("scheduleContainer");
+      
       if (data.error) {
         loading.textContent = `取得失敗: ${data.error}`;
+        container.style.display = "none";
         return;
       }
 
-      const scheduleList = document.getElementById("scheduleList");
-      scheduleList.innerHTML = "";
+      const scheduleGrid = document.getElementById("scheduleGrid");
+      scheduleGrid.innerHTML = "";
 
-      const timeSlots = {};
-
+      // 時間軸の準備
+      const timeSlots = generateTimeSlots();
+      
+      // 各ユーザーのイベントを時間別に整理
+      const userEvents = {};
       data.calendars.forEach(user => {
         const displayName = user.name || user.email;
+        userEvents[displayName] = {};
+        
         user.events.forEach(ev => {
-          const range = formatTimeRange(ev.start, ev.end);
-          if (!timeSlots[range]) timeSlots[range] = [];
-          timeSlots[range].push({
-            name: displayName,
+          const timeInfo = getEventTimeSlot(ev.start, ev.end);
+          const startHour = timeInfo.startHour;
+          
+          if (!userEvents[displayName][startHour]) {
+            userEvents[displayName][startHour] = [];
+          }
+          
+          userEvents[displayName][startHour].push({
             summary: ev.summary,
-            location: ev.location || ""
+            location: ev.location || "",
+            start: ev.start,
+            end: ev.end,
+            timeInfo: timeInfo
           });
         });
       });
 
-      const dateStr = document.getElementById("datePicker").value;
-      const title = document.createElement("h2");
-      title.textContent = formatDateWithWeekday(dateStr);
-      scheduleList.appendChild(title);
+      // ヘッダー行を作成
+      const headerRow = document.createElement("div");
+      headerRow.className = "grid-header";
+      
+      // 名前列のヘッダー
+      const nameHeader = document.createElement("div");
+      nameHeader.className = "grid-cell name-cell name-header";
+      nameHeader.textContent = formatDateWithWeekday(document.getElementById("datePicker").value);
+      headerRow.appendChild(nameHeader);
+      
+      // 時間列のヘッダー
+      timeSlots.forEach(time => {
+        const timeHeader = document.createElement("div");
+        timeHeader.className = "grid-cell time-header";
+        timeHeader.textContent = time;
+        headerRow.appendChild(timeHeader);
+      });
+      scheduleGrid.appendChild(headerRow);
 
-      if (Object.keys(timeSlots).length === 0) {
-        scheduleList.innerHTML += '<p>予定なし</p>';
+      // データ行を作成
+      const userNames = Object.keys(userEvents);
+      if (userNames.length === 0) {
+        const noDataRow = document.createElement("div");
+        noDataRow.className = "no-events";
+        noDataRow.textContent = "対象者の予定が見つかりません";
+        scheduleGrid.appendChild(noDataRow);
       } else {
-        Object.keys(timeSlots).sort().forEach(range => {
-          const block = document.createElement("div");
-          block.className = "time-block";
-
-          const timeTitle = document.createElement("div");
-          timeTitle.className = "time-title";
-          timeTitle.textContent = range;
-          block.appendChild(timeTitle);
-
-          timeSlots[range].forEach(ev => {
-            const row = document.createElement("div");
-            row.className = "person-row";
-
-            const name = document.createElement("div");
-            name.className = "person-name";
-            name.textContent = ev.name || ev.email;
-
-            const summary = document.createElement("div");
-            summary.className = "person-summary";
-            summary.textContent = `${ev.summary}${ev.location ? " @ " + ev.location : ""}`;
-
-            row.appendChild(name);
-            row.appendChild(summary);
-            block.appendChild(row);
+        userNames.forEach(userName => {
+          const row = document.createElement("div");
+          row.className = "grid-row";
+          
+          // 名前セル
+          const nameCell = document.createElement("div");
+          nameCell.className = "grid-cell name-cell";
+          nameCell.textContent = userName;
+          row.appendChild(nameCell);
+          
+          // 時間セル
+          timeSlots.forEach(timeSlot => {
+            const hour = parseInt(timeSlot.split(':')[0]);
+            const cell = document.createElement("div");
+            cell.className = "grid-cell";
+            
+            if (userEvents[userName][hour]) {
+              userEvents[userName][hour].forEach(event => {
+                const eventDiv = document.createElement("div");
+                eventDiv.className = "event-item";
+                
+                const startTime = `${event.timeInfo.startHour.toString().padStart(2, '0')}:${event.timeInfo.startMinute.toString().padStart(2, '0')}`;
+                const endTime = `${event.timeInfo.endHour.toString().padStart(2, '0')}:${event.timeInfo.endMinute.toString().padStart(2, '0')}`;
+                
+                eventDiv.textContent = `${startTime}-${endTime} ${event.summary}`;
+                if (event.location) {
+                  eventDiv.textContent += ` @${event.location}`;
+                }
+                
+                eventDiv.title = `${startTime}-${endTime}\n${event.summary}${event.location ? '\n場所: ' + event.location : ''}`;
+                cell.appendChild(eventDiv);
+              });
+            }
+            
+            row.appendChild(cell);
           });
-
-          scheduleList.appendChild(block);
+          
+          scheduleGrid.appendChild(row);
         });
       }
 
       loading.style.display = "none";
+      container.style.display = "block";
     }
 
     function loadSchedule(group, date) {
       document.getElementById("loading").style.display = "block";
       document.getElementById("loading").textContent = "読み込み中...";
-      document.getElementById("scheduleList").innerHTML = "";
+      document.getElementById("scheduleContainer").style.display = "none";
 
       const url = `${endpoint}?group=${encodeURIComponent(group)}&date=${encodeURIComponent(date)}&callback=renderResult`;
       console.log("🔗 JSONP URL:", url);
