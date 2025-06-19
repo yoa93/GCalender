@@ -35,45 +35,42 @@
     }
     
     .schedule-grid {
-      display: table;
+      display: grid;
+      grid-template-columns: 120px repeat(14, 120px); /* Name column + 14 time columns (7:00-20:00) */
       min-width: 100%;
       background: white;
+      position: relative;
     }
     
     .grid-header {
-      display: table-row;
-      background: #f8f9fa;
-      font-weight: bold;
+      display: contents;
     }
     
     .grid-row {
-      display: table-row;
-    }
-    
-    .grid-row:nth-child(even) {
-      background: #f9f9f9;
+      display: contents;
     }
     
     .grid-cell {
-      display: table-cell;
       border: 1px solid #e0e0e0;
       padding: 4px 8px;
-      vertical-align: top;
       position: relative;
-      min-height: 60px;
-      width: 120px;
-      max-width: 120px;
-      word-wrap: break-word;
+      min-height: 80px;
+      background: white;
+    }
+    
+    .grid-row:nth-child(even) .grid-cell:not(.name-cell) {
+      background: #f9f9f9;
     }
     
     .name-cell {
-      width: 120px;
       background: #fff;
       font-weight: bold;
       position: sticky;
       left: 0;
       z-index: 10;
       border-right: 2px solid #ddd;
+      display: flex;
+      align-items: center;
     }
     
     .time-header {
@@ -83,6 +80,8 @@
       position: sticky;
       top: 0;
       z-index: 5;
+      padding: 8px 4px;
+      font-weight: bold;
     }
     
     .name-header {
@@ -92,45 +91,60 @@
       z-index: 15;
       background: #e9ecef;
       text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+    }
+    
+    /* Container for events in each row */
+    .event-container {
+      position: absolute;
+      top: 0;
+      left: 120px; /* Start after name column */
+      right: 0;
+      height: 100%;
+      pointer-events: none;
     }
     
     .event-item {
+      position: absolute;
       background: #007bff;
       color: white;
-      padding: 3px 5px;
-      margin: 2px 0;
-      border-radius: 3px;
+      padding: 4px 6px;
+      border-radius: 4px;
       font-size: 10px;
       line-height: 1.3;
-      word-wrap: break-word;
-      white-space: normal;
       cursor: pointer;
-      min-height: 45px;
-      max-height: 80px;
+      pointer-events: auto;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
       overflow: hidden;
-      position: relative;
+      min-height: 60px;
+      top: 4px;
+      bottom: 4px;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.1s, box-shadow 0.1s;
     }
     
-    .event-item.half-hour {
-      min-height: 22px;
-      max-height: 40px;
-    }
-    
-    .event-item.first-half {
-      margin-bottom: 1px;
-    }
-    
-    .event-item.second-half {
-      margin-top: 1px;
+    .event-item:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      z-index: 20;
     }
     
     .event-time {
       font-weight: bold;
       margin-bottom: 2px;
+      font-size: 11px;
     }
     
     .event-title {
       margin-bottom: 2px;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex-shrink: 0;
     }
     
     .event-details {
@@ -139,9 +153,22 @@
       border-top: 1px solid rgba(255,255,255,0.3);
       padding-top: 2px;
       line-height: 1.2;
-      max-height: 25px;
       overflow: hidden;
-      word-break: break-all;
+      flex-grow: 1;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+    }
+    
+    /* Color variations for overlapping events */
+    .event-item.overlap-1 {
+      background: #0056b3;
+      top: 28px;
+    }
+    
+    .event-item.overlap-2 {
+      background: #004494;
+      top: 52px;
     }
     
     .no-events {
@@ -149,6 +176,7 @@
       font-style: italic;
       text-align: center;
       padding: 20px;
+      grid-column: 1 / -1;
     }
     
     #loading {
@@ -211,6 +239,55 @@
       };
     }
 
+    function calculateEventPosition(event, cellWidth = 120) {
+      const startHour = event.timeInfo.startHour;
+      const endHour = event.timeInfo.endHour;
+      const startMinute = event.timeInfo.startMinute;
+      const endMinute = event.timeInfo.endMinute;
+      
+      // Calculate position from start of grid (7:00 = column 0)
+      const startColumn = startHour - 7;
+      const endColumn = endHour - 7;
+      
+      // Calculate pixel offsets within the cells
+      const startOffset = (startMinute / 60) * cellWidth;
+      const endOffset = (endMinute / 60) * cellWidth;
+      
+      // Calculate total position and width
+      const left = (startColumn * cellWidth) + startOffset;
+      const width = ((endColumn - startColumn) * cellWidth) + endOffset - startOffset;
+      
+      return { left, width };
+    }
+
+    function detectEventOverlaps(events) {
+      // Sort events by start time
+      const sortedEvents = events.sort((a, b) => {
+        const aStart = new Date(a.start);
+        const bStart = new Date(b.start);
+        return aStart - bStart;
+      });
+      
+      // Assign overlap levels
+      sortedEvents.forEach((event, index) => {
+        event.overlapLevel = 0;
+        
+        // Check overlap with previous events
+        for (let i = 0; i < index; i++) {
+          const prevEvent = sortedEvents[i];
+          const eventStart = new Date(event.start);
+          const prevEnd = new Date(prevEvent.end);
+          
+          // If events overlap
+          if (eventStart < prevEnd) {
+            event.overlapLevel = Math.max(event.overlapLevel, prevEvent.overlapLevel + 1);
+          }
+        }
+      });
+      
+      return sortedEvents;
+    }
+
     function renderResult(data) {
       console.log("📦 GAS JSONP response:", data);
       const loading = document.getElementById("loading");
@@ -228,194 +305,142 @@
       // 時間軸の準備
       const timeSlots = generateTimeSlots();
       
-      // 各ユーザーのイベントを時間別に整理
-      const userEvents = {};
-      data.calendars.forEach(user => {
-        const displayName = user.name || user.email;
-        userEvents[displayName] = {};
-        
-        user.events.forEach(ev => {
-          const timeInfo = getEventTimeSlot(ev.start, ev.end);
-          const startHour = timeInfo.startHour;
-          const endHour = timeInfo.endHour;
-          
-          // イベントが跨ぐ全ての時間帯に登録
-          for (let hour = startHour; hour <= endHour && hour <= 20; hour++) {
-            if (hour < 7) continue; // 7時前は表示しない
-            
-            if (!userEvents[displayName][hour]) {
-              userEvents[displayName][hour] = [];
-            }
-            
-            userEvents[displayName][hour].push({
-              summary: ev.summary,
-              location: ev.location || "",
-              description: ev.description || "",
-              start: ev.start,
-              end: ev.end,
-              timeInfo: timeInfo,
-              isStart: hour === startHour,
-              isEnd: hour === endHour,
-              isContinuation: hour > startHour && hour < endHour,
-              isFirstHalf: hour === startHour && timeInfo.startMinute < 30,
-              isSecondHalf: hour === endHour && timeInfo.endMinute > 30,
-              startsInSecondHalf: hour === startHour && timeInfo.startMinute >= 30,
-              endsInFirstHalf: hour === endHour && timeInfo.endMinute <= 30,
-              duration: (endHour - startHour) * 60 + (timeInfo.endMinute - timeInfo.startMinute)
-            });
-          }
-        });
-      });
-
       // ヘッダー行を作成
-      const headerRow = document.createElement("div");
-      headerRow.className = "grid-header";
-      
       // 名前列のヘッダー
       const nameHeader = document.createElement("div");
       nameHeader.className = "grid-cell name-cell name-header";
       nameHeader.textContent = formatDateWithWeekday(document.getElementById("datePicker").value);
-      headerRow.appendChild(nameHeader);
+      scheduleGrid.appendChild(nameHeader);
       
       // 時間列のヘッダー
       timeSlots.forEach(time => {
         const timeHeader = document.createElement("div");
         timeHeader.className = "grid-cell time-header";
         timeHeader.textContent = time;
-        headerRow.appendChild(timeHeader);
+        scheduleGrid.appendChild(timeHeader);
       });
-      scheduleGrid.appendChild(headerRow);
 
       // データ行を作成
-      const userNames = Object.keys(userEvents);
-      if (userNames.length === 0) {
+      if (data.calendars.length === 0) {
         const noDataRow = document.createElement("div");
         noDataRow.className = "no-events";
         noDataRow.textContent = "対象者の予定が見つかりません";
         scheduleGrid.appendChild(noDataRow);
       } else {
-        userNames.forEach(userName => {
-          const row = document.createElement("div");
-          row.className = "grid-row";
+        data.calendars.forEach((user, userIndex) => {
+          const displayName = user.name || user.email;
           
           // 名前セル
           const nameCell = document.createElement("div");
           nameCell.className = "grid-cell name-cell";
-          nameCell.textContent = userName;
-          row.appendChild(nameCell);
+          nameCell.style.gridRow = userIndex + 2; // +2 because header is row 1
+          nameCell.textContent = displayName;
+          scheduleGrid.appendChild(nameCell);
           
-          // 時間セル
-          timeSlots.forEach(timeSlot => {
-            const hour = parseInt(timeSlot.split(':')[0]);
+          // 時間セル（空のセルを作成）
+          timeSlots.forEach((timeSlot, timeIndex) => {
             const cell = document.createElement("div");
             cell.className = "grid-cell";
-            
-            if (userEvents[userName][hour]) {
-              userEvents[userName][hour].forEach(event => {
-                const eventDiv = document.createElement("div");
-                let eventClasses = ["event-item"];
-                
-                const startTime = `${event.timeInfo.startHour.toString().padStart(2, '0')}:${event.timeInfo.startMinute.toString().padStart(2, '0')}`;
-                const endTime = `${event.timeInfo.endHour.toString().padStart(2, '0')}:${event.timeInfo.endMinute.toString().padStart(2, '0')}`;
-                
-                // 30分単位の表示判定
-                if (event.duration <= 30 && event.isStart && event.isEnd) {
-                  // 30分以内の予定
-                  eventClasses.push("half-hour");
-                  if (event.startsInSecondHalf) {
-                    eventClasses.push("second-half");
-                  } else {
-                    eventClasses.push("first-half");
-                  }
-                } else if (event.isStart && event.endsInFirstHalf && !event.isEnd) {
-                  // 開始時刻のセルで、次の時間の前半で終わる
-                  eventClasses.push("half-hour", "first-half");
-                } else if (event.isEnd && event.endsInFirstHalf && !event.isStart) {
-                  // 終了時刻のセルで、前半で終わる
-                  eventClasses.push("half-hour", "first-half");
-                }
-                
-                eventDiv.className = eventClasses.join(" ");
-                
-                // 継続中のイベントは簡潔に表示
-                if (event.isContinuation) {
-                  eventDiv.style.background = '#0056b3';
-                  eventDiv.style.borderRadius = '0';
-                  eventDiv.style.minHeight = '25px';
-                  
-                  const titleDiv = document.createElement("div");
-                  titleDiv.className = "event-title";
-                  titleDiv.style.fontSize = '9px';
-                  titleDiv.textContent = `↕ ${event.summary}`;
-                  eventDiv.appendChild(titleDiv);
-                } else {
-                  // 開始時刻のセルには詳細を表示
-                  if (event.isStart) {
-                    // 時間表示
-                    const timeDiv = document.createElement("div");
-                    timeDiv.className = "event-time";
-                    timeDiv.textContent = `${startTime}-${endTime}`;
-                    eventDiv.appendChild(timeDiv);
-                    
-                    // タイトル表示
-                    const titleDiv = document.createElement("div");
-                    titleDiv.className = "event-title";
-                    titleDiv.textContent = event.summary;
-                    eventDiv.appendChild(titleDiv);
-                    
-                    // 詳細表示（2文まで、URLなど長い文字列を制限）
-                    if (event.description) {
-                      const detailsDiv = document.createElement("div");
-                      detailsDiv.className = "event-details";
-                      
-                      // 詳細を改行で分割し、最初の2文を取得
-                      let sentences = event.description.split(/[。\n]/).filter(s => s.trim());
-                      
-                      // URLや長い文字列をフィルタリング
-                      sentences = sentences.filter(s => {
-                        // URLを除外
-                        if (s.includes('http') || s.includes('www.')) return false;
-                        // 50文字以上の文章を除外
-                        if (s.length > 50) return false;
-                        return true;
-                      });
-                      
-                      const displayDetails = sentences.slice(0, 2).join('。');
-                      if (displayDetails) {
-                        detailsDiv.textContent = displayDetails + (sentences.length > 2 ? '。' : '');
-                      }
-                      
-                      if (detailsDiv.textContent) {
-                        eventDiv.appendChild(detailsDiv);
-                      }
-                    }
-                  } else {
-                    // 終了時刻のセルも簡潔に
-                    eventDiv.style.background = '#0056b3';
-                    eventDiv.style.minHeight = '25px';
-                    
-                    const titleDiv = document.createElement("div");
-                    titleDiv.className = "event-title";
-                    titleDiv.style.fontSize = '9px';
-                    titleDiv.textContent = `↕ ${event.summary}`;
-                    eventDiv.appendChild(titleDiv);
-                  }
-                }
-                
-                // ツールチップ
-                let tooltipText = `${startTime}-${endTime}\n${event.summary}`;
-                if (event.location) tooltipText += `\n場所: ${event.location}`;
-                if (event.description) tooltipText += `\n詳細: ${event.description}`;
-                eventDiv.title = tooltipText;
-                
-                cell.appendChild(eventDiv);
-              });
-            }
-            
-            row.appendChild(cell);
+            cell.style.gridRow = userIndex + 2;
+            cell.style.gridColumn = timeIndex + 2; // +2 because name column is 1
+            scheduleGrid.appendChild(cell);
           });
           
-          scheduleGrid.appendChild(row);
+          // イベントコンテナを作成
+          const eventContainer = document.createElement("div");
+          eventContainer.className = "event-container";
+          eventContainer.style.gridRow = userIndex + 2;
+          eventContainer.style.gridColumn = "2 / -1"; // Span all time columns
+          eventContainer.style.height = "80px"; // Match cell height
+          
+          // Process events for overlaps
+          const processedEvents = detectEventOverlaps(user.events);
+          
+          // イベントを配置
+          processedEvents.forEach(ev => {
+            const timeInfo = getEventTimeSlot(ev.start, ev.end);
+            
+            // Skip events outside display range
+            if (timeInfo.endHour < 7 || timeInfo.startHour > 20) return;
+            
+            // Adjust for display range
+            const adjustedEvent = {
+              ...ev,
+              timeInfo: {
+                ...timeInfo,
+                startHour: Math.max(timeInfo.startHour, 7),
+                endHour: Math.min(timeInfo.endHour, 20),
+                startMinute: timeInfo.startHour < 7 ? 0 : timeInfo.startMinute,
+                endMinute: timeInfo.endHour > 20 ? 0 : timeInfo.endMinute
+              }
+            };
+            
+            const position = calculateEventPosition(adjustedEvent);
+            
+            const eventDiv = document.createElement("div");
+            eventDiv.className = "event-item";
+            
+            // Apply overlap styling
+            if (ev.overlapLevel > 0) {
+              eventDiv.className += ` overlap-${Math.min(ev.overlapLevel, 2)}`;
+            }
+            
+            // Set position and size
+            eventDiv.style.left = `${position.left}px`;
+            eventDiv.style.width = `${position.width - 8}px`; // -8 for padding/margin
+            
+            // 時間表示
+            const startTime = `${timeInfo.startHour.toString().padStart(2, '0')}:${timeInfo.startMinute.toString().padStart(2, '0')}`;
+            const endTime = `${timeInfo.endHour.toString().padStart(2, '0')}:${timeInfo.endMinute.toString().padStart(2, '0')}`;
+            
+            const timeDiv = document.createElement("div");
+            timeDiv.className = "event-time";
+            timeDiv.textContent = `${startTime}-${endTime}`;
+            eventDiv.appendChild(timeDiv);
+            
+            // タイトル表示
+            const titleDiv = document.createElement("div");
+            titleDiv.className = "event-title";
+            titleDiv.textContent = ev.summary;
+            eventDiv.appendChild(titleDiv);
+            
+            // 詳細表示（2文まで、URLなど長い文字列を制限）
+            if (ev.description) {
+              const detailsDiv = document.createElement("div");
+              detailsDiv.className = "event-details";
+              
+              // 詳細を改行で分割し、最初の2文を取得
+              let sentences = ev.description.split(/[。\n]/).filter(s => s.trim());
+              
+              // URLや長い文字列をフィルタリング
+              sentences = sentences.filter(s => {
+                // URLを除外
+                if (s.includes('http') || s.includes('www.')) return false;
+                // 50文字以上の文章を除外
+                if (s.length > 50) return false;
+                return true;
+              });
+              
+              const displayDetails = sentences.slice(0, 2).join('。');
+              if (displayDetails) {
+                detailsDiv.textContent = displayDetails + (sentences.length > 2 ? '。' : '');
+              }
+              
+              if (detailsDiv.textContent) {
+                eventDiv.appendChild(detailsDiv);
+              }
+            }
+            
+            // ツールチップ
+            let tooltipText = `${startTime}-${endTime}\n${ev.summary}`;
+            if (ev.location) tooltipText += `\n場所: ${ev.location}`;
+            if (ev.description) tooltipText += `\n詳細: ${ev.description}`;
+            eventDiv.title = tooltipText;
+            
+            eventContainer.appendChild(eventDiv);
+          });
+          
+          scheduleGrid.appendChild(eventContainer);
         });
       }
 
