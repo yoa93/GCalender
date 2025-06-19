@@ -330,10 +330,18 @@
         data.calendars.forEach((user, userIndex) => {
           const displayName = user.name || user.email;
           
+          // Process events for overlaps first to determine row height
+          const processedEvents = detectEventOverlaps(user.events);
+          
+          // 最大重複レベルを計算
+          const maxOverlapLevel = Math.max(0, ...processedEvents.map(e => e.overlapLevel));
+          const rowHeight = Math.max(80, 80 + maxOverlapLevel * 35); // 基本80px + 重複分
+          
           // 名前セル
           const nameCell = document.createElement("div");
           nameCell.className = "grid-cell name-cell";
           nameCell.style.gridRow = userIndex + 2; // +2 because header is row 1
+          nameCell.style.minHeight = `${rowHeight}px`;
           nameCell.textContent = displayName;
           scheduleGrid.appendChild(nameCell);
           
@@ -343,6 +351,7 @@
             cell.className = "grid-cell";
             cell.style.gridRow = userIndex + 2;
             cell.style.gridColumn = timeIndex + 2; // +2 because name column is 1
+            cell.style.minHeight = `${rowHeight}px`;
             scheduleGrid.appendChild(cell);
           });
           
@@ -351,10 +360,7 @@
           eventContainer.className = "event-container";
           eventContainer.style.gridRow = userIndex + 2;
           eventContainer.style.gridColumn = "2 / -1"; // Span all time columns
-          eventContainer.style.height = "80px"; // Match cell height
-          
-          // Process events for overlaps
-          const processedEvents = detectEventOverlaps(user.events);
+          eventContainer.style.height = `${rowHeight}px`;
           
           // イベントを配置
           processedEvents.forEach(ev => {
@@ -388,6 +394,7 @@
             // Set position and size
             eventDiv.style.left = `${position.left}px`;
             eventDiv.style.width = `${position.width - 8}px`; // -8 for padding/margin
+            eventDiv.style.top = `${ev.overlapLevel * 35}px`; // 35px vertical offset per overlap level
             
             // 時間表示
             const startTime = `${timeInfo.startHour.toString().padStart(2, '0')}:${timeInfo.startMinute.toString().padStart(2, '0')}`;
