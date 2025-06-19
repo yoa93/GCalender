@@ -108,6 +108,20 @@
       min-height: 45px;
       max-height: 80px;
       overflow: hidden;
+      position: relative;
+    }
+    
+    .event-item.half-hour {
+      min-height: 22px;
+      max-height: 40px;
+    }
+    
+    .event-item.first-half {
+      margin-bottom: 1px;
+    }
+    
+    .event-item.second-half {
+      margin-top: 1px;
     }
     
     .event-time {
@@ -223,19 +237,33 @@
         user.events.forEach(ev => {
           const timeInfo = getEventTimeSlot(ev.start, ev.end);
           const startHour = timeInfo.startHour;
+          const endHour = timeInfo.endHour;
           
-          if (!userEvents[displayName][startHour]) {
-            userEvents[displayName][startHour] = [];
+          // イベントが跨ぐ全ての時間帯に登録
+          for (let hour = startHour; hour <= endHour && hour <= 20; hour++) {
+            if (hour < 7) continue; // 7時前は表示しない
+            
+            if (!userEvents[displayName][hour]) {
+              userEvents[displayName][hour] = [];
+            }
+            
+            userEvents[displayName][hour].push({
+              summary: ev.summary,
+              location: ev.location || "",
+              description: ev.description || "",
+              start: ev.start,
+              end: ev.end,
+              timeInfo: timeInfo,
+              isStart: hour === startHour,
+              isEnd: hour === endHour,
+              isContinuation: hour > startHour && hour < endHour,
+              isFirstHalf: hour === startHour && timeInfo.startMinute < 30,
+              isSecondHalf: hour === endHour && timeInfo.endMinute > 30,
+              startsInSecondHalf: hour === startHour && timeInfo.startMinute >= 30,
+              endsInFirstHalf: hour === endHour && timeInfo.endMinute <= 30,
+              duration: (endHour - startHour) * 60 + (timeInfo.endMinute - timeInfo.startMinute)
+            });
           }
-          
-          userEvents[displayName][startHour].push({
-            summary: ev.summary,
-            location: ev.location || "",
-            description: ev.description || "",
-            start: ev.start,
-            end: ev.end,
-            timeInfo: timeInfo
-          });
         });
       });
 
@@ -285,47 +313,92 @@
             if (userEvents[userName][hour]) {
               userEvents[userName][hour].forEach(event => {
                 const eventDiv = document.createElement("div");
-                eventDiv.className = "event-item";
+                let eventClasses = ["event-item"];
                 
                 const startTime = `${event.timeInfo.startHour.toString().padStart(2, '0')}:${event.timeInfo.startMinute.toString().padStart(2, '0')}`;
                 const endTime = `${event.timeInfo.endHour.toString().padStart(2, '0')}:${event.timeInfo.endMinute.toString().padStart(2, '0')}`;
                 
-                // 時間表示
-                const timeDiv = document.createElement("div");
-                timeDiv.className = "event-time";
-                timeDiv.textContent = `${startTime}-${endTime}`;
-                eventDiv.appendChild(timeDiv);
-                
-                // タイトル表示
-                const titleDiv = document.createElement("div");
-                titleDiv.className = "event-title";
-                titleDiv.textContent = event.summary;
-                eventDiv.appendChild(titleDiv);
-                
-                // 詳細表示（2文まで、URLなど長い文字列を制限）
-                if (event.description) {
-                  const detailsDiv = document.createElement("div");
-                  detailsDiv.className = "event-details";
-                  
-                  // 詳細を改行で分割し、最初の2文を取得
-                  let sentences = event.description.split(/[。\n]/).filter(s => s.trim());
-                  
-                  // URLや長い文字列をフィルタリング
-                  sentences = sentences.filter(s => {
-                    // URLを除外
-                    if (s.includes('http') || s.includes('www.')) return false;
-                    // 50文字以上の文章を除外
-                    if (s.length > 50) return false;
-                    return true;
-                  });
-                  
-                  const displayDetails = sentences.slice(0, 2).join('。');
-                  if (displayDetails) {
-                    detailsDiv.textContent = displayDetails + (sentences.length > 2 ? '。' : '');
+                // 30分単位の表示判定
+                if (event.duration <= 30 && event.isStart && event.isEnd) {
+                  // 30分以内の予定
+                  eventClasses.push("half-hour");
+                  if (event.startsInSecondHalf) {
+                    eventClasses.push("second-half");
+                  } else {
+                    eventClasses.push("first-half");
                   }
+                } else if (event.isStart && event.endsInFirstHalf && !event.isEnd) {
+                  // 開始時刻のセルで、次の時間の前半で終わる
+                  eventClasses.push("half-hour", "first-half");
+                } else if (event.isEnd && event.endsInFirstHalf && !event.isStart) {
+                  // 終了時刻のセルで、前半で終わる
+                  eventClasses.push("half-hour", "first-half");
+                }
+                
+                eventDiv.className = eventClasses.join(" ");
+                
+                // 継続中のイベントは簡潔に表示
+                if (event.isContinuation) {
+                  eventDiv.style.background = '#0056b3';
+                  eventDiv.style.borderRadius = '0';
+                  eventDiv.style.minHeight = '25px';
                   
-                  if (detailsDiv.textContent) {
-                    eventDiv.appendChild(detailsDiv);
+                  const titleDiv = document.createElement("div");
+                  titleDiv.className = "event-title";
+                  titleDiv.style.fontSize = '9px';
+                  titleDiv.textContent = `↕ ${event.summary}`;
+                  eventDiv.appendChild(titleDiv);
+                } else {
+                  // 開始時刻のセルには詳細を表示
+                  if (event.isStart) {
+                    // 時間表示
+                    const timeDiv = document.createElement("div");
+                    timeDiv.className = "event-time";
+                    timeDiv.textContent = `${startTime}-${endTime}`;
+                    eventDiv.appendChild(timeDiv);
+                    
+                    // タイトル表示
+                    const titleDiv = document.createElement("div");
+                    titleDiv.className = "event-title";
+                    titleDiv.textContent = event.summary;
+                    eventDiv.appendChild(titleDiv);
+                    
+                    // 詳細表示（2文まで、URLなど長い文字列を制限）
+                    if (event.description) {
+                      const detailsDiv = document.createElement("div");
+                      detailsDiv.className = "event-details";
+                      
+                      // 詳細を改行で分割し、最初の2文を取得
+                      let sentences = event.description.split(/[。\n]/).filter(s => s.trim());
+                      
+                      // URLや長い文字列をフィルタリング
+                      sentences = sentences.filter(s => {
+                        // URLを除外
+                        if (s.includes('http') || s.includes('www.')) return false;
+                        // 50文字以上の文章を除外
+                        if (s.length > 50) return false;
+                        return true;
+                      });
+                      
+                      const displayDetails = sentences.slice(0, 2).join('。');
+                      if (displayDetails) {
+                        detailsDiv.textContent = displayDetails + (sentences.length > 2 ? '。' : '');
+                      }
+                      
+                      if (detailsDiv.textContent) {
+                        eventDiv.appendChild(detailsDiv);
+                      }
+                    }
+                  } else {
+                    // 終了時刻のセルも簡潔に
+                    eventDiv.style.background = '#0056b3';
+                    eventDiv.style.minHeight = '25px';
+                    
+                    const titleDiv = document.createElement("div");
+                    titleDiv.className = "event-title";
+                    titleDiv.style.fontSize = '9px';
+                    titleDiv.textContent = `↕ ${event.summary}`;
+                    eventDiv.appendChild(titleDiv);
                   }
                 }
                 
