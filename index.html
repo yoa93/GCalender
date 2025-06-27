@@ -99,12 +99,10 @@
     
     /* Container for events in each row */
     .event-container {
-      position: absolute;
-      top: 0;
-      left: 120px; /* Start after name column */
-      right: 0;
+      position: relative;
       height: 100%;
       pointer-events: none;
+      grid-column: 2 / -1;
     }
     
     .event-item {
@@ -231,11 +229,20 @@
     function getEventTimeSlot(eventStart, eventEnd) {
       const start = new Date(eventStart);
       const end = new Date(eventEnd);
+      
+      // 日本時間での時刻を取得
+      const startJST = start.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+      const endJST = end.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+      
+      // 時刻部分を抽出
+      const startTimeParts = startJST.split(' ')[1].split(':');
+      const endTimeParts = endJST.split(' ')[1].split(':');
+      
       return {
-        startHour: start.getHours(),
-        endHour: end.getHours(),
-        startMinute: start.getMinutes(),
-        endMinute: end.getMinutes()
+        startHour: parseInt(startTimeParts[0], 10),
+        endHour: parseInt(endTimeParts[0], 10),
+        startMinute: parseInt(startTimeParts[1], 10),
+        endMinute: parseInt(endTimeParts[1], 10)
       };
     }
 
@@ -359,7 +366,6 @@
           const eventContainer = document.createElement("div");
           eventContainer.className = "event-container";
           eventContainer.style.gridRow = userIndex + 2;
-          eventContainer.style.gridColumn = "2 / -1"; // Span all time columns
           eventContainer.style.height = `${rowHeight}px`;
           
           // イベントを配置
@@ -368,15 +374,42 @@
             const eventStartDate = new Date(ev.start);
             const eventEndDate = new Date(ev.end);
             const selectedDateStr = document.getElementById("datePicker").value;
-            const selectedDate = new Date(selectedDateStr + "T00:00:00");
-            const selectedDateEnd = new Date(selectedDateStr + "T23:59:59");
             
-            // Skip events that don't overlap with the selected date
-            if (eventEndDate < selectedDate || eventStartDate > selectedDateEnd) {
+            // デバッグ: 元のイベント情報を表示
+            console.log(`\n=== Event: ${ev.summary} ===`);
+            console.log(`Original start: ${ev.start}`);
+            console.log(`Original end: ${ev.end}`);
+            console.log(`Selected date: ${selectedDateStr}`);
+            
+            // 日本時間での日付を取得する関数
+            function getJSTDate(dateStr) {
+              const date = new Date(dateStr);
+              // JSTでの年月日を取得
+              const jstStr = date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+              const [datePartJST] = jstStr.split(' ');
+              const [year, month, day] = datePartJST.split('/').map(num => parseInt(num, 10));
+              return { year, month: month - 1, day }; // monthは0ベース
+            }
+            
+            // イベント開始日時のJST日付を取得
+            const eventJSTDate = getJSTDate(ev.start);
+            const eventDateStr = `${eventJSTDate.year}-${String(eventJSTDate.month + 1).padStart(2, '0')}-${String(eventJSTDate.day).padStart(2, '0')}`;
+            
+            console.log(`Event JST date: ${eventDateStr}`);
+            console.log(`Should show on: ${selectedDateStr}`);
+            
+            // 選択された日付と比較
+            if (eventDateStr !== selectedDateStr) {
+              console.log(`Skipping event "${ev.summary}" - different date (${eventDateStr} !== ${selectedDateStr})`);
               return;
             }
             
+            console.log(`Showing event "${ev.summary}" on ${selectedDateStr}`);
+            
             const timeInfo = getEventTimeSlot(ev.start, ev.end);
+            
+            // Debug time info
+            console.log(`Time info (JST) for "${ev.summary}": ${timeInfo.startHour}:${String(timeInfo.startMinute).padStart(2, '0')} - ${timeInfo.endHour}:${String(timeInfo.endMinute).padStart(2, '0')}`);
             
             // Skip events outside display range
             if (timeInfo.endHour < 7 || timeInfo.startHour > 20) return;
@@ -394,6 +427,7 @@
             };
             
             const position = calculateEventPosition(adjustedEvent);
+            console.log(`Position for "${ev.summary}": left=${position.left}px, width=${position.width}px`);
             
             const eventDiv = document.createElement("div");
             eventDiv.className = "event-item";
