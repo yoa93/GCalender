@@ -364,6 +364,18 @@
           
           // イベントを配置
           processedEvents.forEach(ev => {
+            // Check if event belongs to the selected date
+            const eventStartDate = new Date(ev.start);
+            const eventEndDate = new Date(ev.end);
+            const selectedDateStr = document.getElementById("datePicker").value;
+            const selectedDate = new Date(selectedDateStr + "T00:00:00");
+            const selectedDateEnd = new Date(selectedDateStr + "T23:59:59");
+            
+            // Skip events that don't overlap with the selected date
+            if (eventEndDate < selectedDate || eventStartDate > selectedDateEnd) {
+              return;
+            }
+            
             const timeInfo = getEventTimeSlot(ev.start, ev.end);
             
             // Skip events outside display range
