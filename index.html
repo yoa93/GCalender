@@ -341,6 +341,12 @@
           if (cal.events && cal.events.length > 0) {
             cal.events.forEach(ev => {
               console.log(`    * "${ev.summary}" (${ev.start} - ${ev.end})`);
+              // イベントの詳細情報を表示
+              if (ev.organizer) console.log(`      Organizer: ${ev.organizer}`);
+              if (ev.status) console.log(`      Status: ${ev.status}`);
+              if (ev.attendees) console.log(`      Attendees: ${ev.attendees}`);
+              if (ev.visibility) console.log(`      Visibility: ${ev.visibility}`);
+              if (ev.creator) console.log(`      Creator: ${ev.creator}`);
             });
           }
         });
@@ -434,6 +440,14 @@
             console.log(`Original end: ${ev.end}`);
             console.log(`Selected date: ${selectedDateStr}`);
             
+            // イベントの詳細情報を表示
+            console.log(`Event details:`);
+            console.log(`  - Organizer: ${ev.organizer || 'N/A'}`);
+            console.log(`  - Status: ${ev.status || 'N/A'}`);
+            console.log(`  - Creator: ${ev.creator || 'N/A'}`);
+            console.log(`  - Location: ${ev.location || 'N/A'}`);
+            console.log(`  - Description: ${ev.description ? ev.description.substring(0, 50) + '...' : 'N/A'}`);
+            
             // 日本時間での日付を取得する関数
             function getJSTDate(dateStr) {
               const date = new Date(dateStr);
@@ -470,6 +484,8 @@
             const showEvent = eventStartDateStr === selectedDateStr || 
                              eventEndDateStr === selectedDateStr ||
                              (eventStartDateStr < selectedDateStr && eventEndDateStr > selectedDateStr);
+            
+            console.log(`Date check for "${ev.summary}": start=${eventStartDateStr}, end=${eventEndDateStr}, selected=${selectedDateStr}, show=${showEvent}`);
             
             if (!showEvent) {
               console.log(`Skipping event "${ev.summary}" - not on selected date`);
@@ -574,7 +590,14 @@
             // タイトル表示
             const titleDiv = document.createElement("div");
             titleDiv.className = "event-title";
-            titleDiv.textContent = ev.summary;
+            
+            // 主催者情報を追加
+            let titleText = ev.summary;
+            if (ev.organizer && ev.organizer !== displayName) {
+              titleText += ` [主催: ${ev.organizer}]`;
+            }
+            
+            titleDiv.textContent = titleText;
             eventDiv.appendChild(titleDiv);
             
             // 詳細表示（2文まで、URLなど長い文字列を制限）
