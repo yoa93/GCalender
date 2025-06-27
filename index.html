@@ -389,6 +389,10 @@
           // Process events for overlaps first to determine row height
           const processedEvents = detectEventOverlaps(user.events);
           
+          // デバッグ: ユーザーの全イベントをログ出力
+          console.log(`\n👤 User: ${displayName}`);
+          console.log(`  Total events: ${processedEvents.length}`);
+          
           // 最大重複レベルを計算
           const maxOverlapLevel = Math.max(0, ...processedEvents.map(e => e.overlapLevel));
           const rowHeight = Math.max(80, 80 + maxOverlapLevel * 35); // 基本80px + 重複分
@@ -494,18 +498,24 @@
             
             // Skip events outside display range (終日イベント以外)
             if (!isAllDay) {
-              if (timeInfo.endHour < 7 || (timeInfo.endHour === 7 && timeInfo.endMinute === 0)) {
-                console.log(`Skipping event "${ev.summary}" - ends at or before 7:00 (ends at ${timeInfo.endHour}:${timeInfo.endMinute})`);
+              // 7:00より前に完全に終わるイベントのみスキップ
+              if (timeInfo.endHour < 7) {
+                console.log(`Skipping event "${ev.summary}" - ends before 7:00 (ends at ${timeInfo.endHour}:${timeInfo.endMinute})`);
                 return;
               }
+              
+              // 20:00より後に始まるイベントをスキップ
               if (timeInfo.startHour > 20) {
                 console.log(`Skipping event "${ev.summary}" - starts after 20:00 (starts at ${timeInfo.startHour}:${timeInfo.startMinute})`);
                 return;
               }
               
-              // 7時-9時のイベントを明示的にログ出力
+              // 全てのイベントの時間をログ出力（デバッグ用）
+              console.log(`📍 Event "${ev.summary}": ${timeInfo.startHour}:${String(timeInfo.startMinute).padStart(2, '0')} - ${timeInfo.endHour}:${String(timeInfo.endMinute).padStart(2, '0')}`);
+              
+              // 7時-9時のイベントを明示的にマーク
               if (timeInfo.startHour >= 7 && timeInfo.startHour <= 9) {
-                console.log(`✅ Event in 7-9 time range: "${ev.summary}" (${timeInfo.startHour}:${timeInfo.startMinute} - ${timeInfo.endHour}:${timeInfo.endMinute})`);
+                console.log(`✅ Event in 7-9 time range: "${ev.summary}"`);
               }
             }
             
