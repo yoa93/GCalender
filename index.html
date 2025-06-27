@@ -242,41 +242,19 @@
         return { startHour: 0, endHour: 23, startMinute: 0, endMinute: 59 };
       }
       
-      // Intl.DateTimeFormatを使用して確実に日本時間を取得
-      const options = {
-        timeZone: 'Asia/Tokyo',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false // 24時間表記
-      };
-      
-      const startJSTStr = new Intl.DateTimeFormat('ja-JP', options).format(start);
-      const endJSTStr = new Intl.DateTimeFormat('ja-JP', options).format(end);
-      
-      // 時刻部分を抽出 (format: "YYYY/MM/DD HH:mm:ss")
-      const startMatch = startJSTStr.match(/(\d{2}):(\d{2}):(\d{2})$/);
-      const endMatch = endJSTStr.match(/(\d{2}):(\d{2}):(\d{2})$/);
-      
-      if (!startMatch || !endMatch) {
-        console.warn(`Failed to parse JST time: start=${startJSTStr}, end=${endJSTStr}`);
-        return { startHour: 0, endHour: 23, startMinute: 0, endMinute: 59 };
-      }
-      
+      // イベントの時刻文字列がすでにタイムゾーン情報を含んでいる場合
+      // 追加のタイムゾーン変換は不要で、直接時刻を抽出
       const result = {
-        startHour: parseInt(startMatch[1], 10),
-        endHour: parseInt(endMatch[1], 10),
-        startMinute: parseInt(startMatch[2], 10),
-        endMinute: parseInt(endMatch[2], 10)
+        startHour: start.getHours(),
+        endHour: end.getHours(),
+        startMinute: start.getMinutes(),
+        endMinute: end.getMinutes()
       };
       
       // デバッグ情報
       console.log(`Event times - Original: ${eventStart} to ${eventEnd}`);
-      console.log(`Event times - JST: ${startJSTStr} to ${endJSTStr}`);
-      console.log(`Event times - Parsed: ${result.startHour}:${String(result.startMinute).padStart(2, '0')} to ${result.endHour}:${String(result.endMinute).padStart(2, '0')}`);
+      console.log(`Event times - Date objects: ${start.toString()} to ${end.toString()}`);
+      console.log(`Event times - Extracted: ${result.startHour}:${String(result.startMinute).padStart(2, '0')} to ${result.endHour}:${String(result.endMinute).padStart(2, '0')}`);
       
       return result;
     }
@@ -448,28 +426,29 @@
             console.log(`  - Location: ${ev.location || 'N/A'}`);
             console.log(`  - Description: ${ev.description ? ev.description.substring(0, 50) + '...' : 'N/A'}`);
             
-            // 日本時間での日付を取得する関数
-            function getJSTDate(dateStr) {
+            // 日付を取得する関数（タイムゾーン情報を考慮）
+            function getEventDate(dateStr) {
               const date = new Date(dateStr);
               
-              // Intl.DateTimeFormatを使用して日本時間の日付を取得
-              const options = {
-                timeZone: 'Asia/Tokyo',
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit'
-              };
+              // デバッグ情報を追加
+              console.log(`  Parsing date: ${dateStr}`);
+              console.log(`  Parsed as Date object: ${date.toString()}`);
+              console.log(`  UTC: ${date.toISOString()}`);
               
-              const jstDateStr = new Intl.DateTimeFormat('ja-JP', options).format(date);
-              // Format: "YYYY/MM/DD"
-              const [year, month, day] = jstDateStr.split('/').map(num => parseInt(num, 10));
+              // イベントの日時文字列がすでにJSTタイムゾーン情報を含んでいる場合
+              // 追加のタイムゾーン変換は不要
+              const year = date.getFullYear();
+              const month = date.getMonth();
+              const day = date.getDate();
               
-              return { year, month: month - 1, day }; // monthは0ベース
+              console.log(`  Extracted date: ${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+              
+              return { year, month, day };
             }
             
-            // イベント開始日時と終了日時のJST日付を取得
-            const eventStartJSTDate = getJSTDate(ev.start);
-            const eventEndJSTDate = getJSTDate(ev.end);
+            // イベント開始日時と終了日時の日付を取得
+            const eventStartJSTDate = getEventDate(ev.start);
+            const eventEndJSTDate = getEventDate(ev.end);
             
             const eventStartDateStr = `${eventStartJSTDate.year}-${String(eventStartJSTDate.month + 1).padStart(2, '0')}-${String(eventStartJSTDate.day).padStart(2, '0')}`;
             const eventEndDateStr = `${eventEndJSTDate.year}-${String(eventEndJSTDate.month + 1).padStart(2, '0')}-${String(eventEndJSTDate.day).padStart(2, '0')}`;
