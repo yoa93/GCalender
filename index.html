@@ -242,27 +242,28 @@
         return { startHour: 0, endHour: 23, startMinute: 0, endMinute: 59 };
       }
       
-      // 日本時間での時刻を取得
-      const startJST = start.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false });
-      const endJST = end.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false });
+      // より確実な方法で日本時間を取得
+      // JST = UTC + 9時間
+      const jstOffset = 9 * 60; // 分単位
       
-      // 時刻部分を抽出
-      const startParts = startJST.split(' ');
-      const endParts = endJST.split(' ');
+      // getTimezoneOffset()は現地時間とUTCの差を分単位で返す（JSTの場合-540）
+      const localOffset = new Date().getTimezoneOffset();
+      const totalOffset = jstOffset + localOffset;
       
-      if (startParts.length < 2 || endParts.length < 2) {
-        console.warn(`Unexpected date format: startJST=${startJST}, endJST=${endJST}`);
-        return { startHour: 0, endHour: 23, startMinute: 0, endMinute: 59 };
-      }
+      // JSTでの時刻を計算
+      const startJST = new Date(start.getTime() + totalOffset * 60 * 1000);
+      const endJST = new Date(end.getTime() + totalOffset * 60 * 1000);
       
-      const startTimeParts = startParts[1].split(':');
-      const endTimeParts = endParts[1].split(':');
+      // デバッグ情報
+      console.log(`Original times: start=${eventStart}, end=${eventEnd}`);
+      console.log(`JST converted: start=${startJST.toISOString()}, end=${endJST.toISOString()}`);
+      console.log(`JST hours: start=${startJST.getUTCHours()}:${startJST.getUTCMinutes()}, end=${endJST.getUTCHours()}:${endJST.getUTCMinutes()}`);
       
       return {
-        startHour: parseInt(startTimeParts[0], 10),
-        endHour: parseInt(endTimeParts[0], 10),
-        startMinute: parseInt(startTimeParts[1], 10),
-        endMinute: parseInt(endTimeParts[1], 10)
+        startHour: startJST.getUTCHours(),
+        endHour: endJST.getUTCHours(),
+        startMinute: startJST.getUTCMinutes(),
+        endMinute: endJST.getUTCMinutes()
       };
     }
 
@@ -469,9 +470,20 @@
             }
             
             // Skip events outside display range (終日イベント以外)
-            if (!isAllDay && (timeInfo.endHour < 7 || timeInfo.startHour > 20)) {
-              console.log(`Skipping event "${ev.summary}" - outside display range (7:00-20:00)`);
-              return;
+            if (!isAllDay) {
+              if (timeInfo.endHour < 7 || (timeInfo.endHour === 7 && timeInfo.endMinute === 0)) {
+                console.log(`Skipping event "${ev.summary}" - ends at or before 7:00 (ends at ${timeInfo.endHour}:${timeInfo.endMinute})`);
+                return;
+              }
+              if (timeInfo.startHour > 20) {
+                console.log(`Skipping event "${ev.summary}" - starts after 20:00 (starts at ${timeInfo.startHour}:${timeInfo.startMinute})`);
+                return;
+              }
+              
+              // 7時-9時のイベントを明示的にログ出力
+              if (timeInfo.startHour >= 7 && timeInfo.startHour <= 9) {
+                console.log(`✅ Event in 7-9 time range: "${ev.summary}" (${timeInfo.startHour}:${timeInfo.startMinute} - ${timeInfo.endHour}:${timeInfo.endMinute})`);
+              }
             }
             
             // Adjust for display range
