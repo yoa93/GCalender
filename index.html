@@ -492,12 +492,13 @@
             
             console.log(`Date check for "${ev.summary}": start=${eventStartDateStr}, end=${eventEndDateStr}, selected=${selectedDateStr}, show=${showEvent}`);
             
+            // 拡大された範囲から取得したデータの中で、選択された日付に属するイベントのみを表示
             if (!showEvent) {
-              console.log(`Skipping event "${ev.summary}" - not on selected date`);
+              console.log(`🚫 Skipping event "${ev.summary}" - not on selected date (expanded range filtering)`);
               return;
             }
             
-            console.log(`Showing event "${ev.summary}" on ${selectedDateStr}`);
+            console.log(`✅ Showing event "${ev.summary}" on selected date ${selectedDateStr}`);
             
             const timeInfo = getEventTimeSlot(ev.start, ev.end);
             
@@ -654,7 +655,19 @@
       document.getElementById("loading").textContent = "読み込み中...";
       document.getElementById("scheduleContainer").style.display = "none";
 
-      const url = `${endpoint}?group=${encodeURIComponent(group)}&date=${encodeURIComponent(date)}&callback=renderResult`;
+      // 選択された日付の前後6時間を含む範囲を計算
+      const selectedDate = new Date(date + "T00:00:00");
+      const startDate = new Date(selectedDate);
+      startDate.setHours(startDate.getHours() - 6); // 6時間前
+      const endDate = new Date(selectedDate);
+      endDate.setHours(endDate.getHours() + 30); // 24時間 + 6時間
+      
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
+      
+      console.log(`📅 Requesting data for expanded range: ${startDateStr} to ${endDateStr} (original: ${date})`);
+      
+      const url = `${endpoint}?group=${encodeURIComponent(group)}&date=${encodeURIComponent(date)}&startDate=${encodeURIComponent(startDateStr)}&endDate=${encodeURIComponent(endDateStr)}&callback=renderResult`;
       console.log("🔗 JSONP URL:", url);
 
       const oldScript = document.getElementById("jsonpScript");
