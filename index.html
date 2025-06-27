@@ -227,16 +227,36 @@
     }
 
     function getEventTimeSlot(eventStart, eventEnd) {
+      // 終日イベントかどうかチェック
+      if (!eventStart || !eventEnd) {
+        console.warn('Event missing start or end time');
+        return { startHour: 0, endHour: 23, startMinute: 0, endMinute: 59 };
+      }
+      
       const start = new Date(eventStart);
       const end = new Date(eventEnd);
       
+      // Invalid date check
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        console.warn(`Invalid date format: start=${eventStart}, end=${eventEnd}`);
+        return { startHour: 0, endHour: 23, startMinute: 0, endMinute: 59 };
+      }
+      
       // 日本時間での時刻を取得
-      const startJST = start.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
-      const endJST = end.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+      const startJST = start.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false });
+      const endJST = end.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false });
       
       // 時刻部分を抽出
-      const startTimeParts = startJST.split(' ')[1].split(':');
-      const endTimeParts = endJST.split(' ')[1].split(':');
+      const startParts = startJST.split(' ');
+      const endParts = endJST.split(' ');
+      
+      if (startParts.length < 2 || endParts.length < 2) {
+        console.warn(`Unexpected date format: startJST=${startJST}, endJST=${endJST}`);
+        return { startHour: 0, endHour: 23, startMinute: 0, endMinute: 59 };
+      }
+      
+      const startTimeParts = startParts[1].split(':');
+      const endTimeParts = endParts[1].split(':');
       
       return {
         startHour: parseInt(startTimeParts[0], 10),
@@ -297,6 +317,20 @@
 
     function renderResult(data) {
       console.log("📦 GAS JSONP response:", data);
+      
+      // 各ユーザーのイベント数をログに出力
+      if (data.calendars) {
+        console.log("📅 Calendar summary:");
+        data.calendars.forEach(cal => {
+          console.log(`  - ${cal.name || cal.email}: ${cal.events ? cal.events.length : 0} events`);
+          if (cal.events && cal.events.length > 0) {
+            cal.events.forEach(ev => {
+              console.log(`    * "${ev.summary}" (${ev.start} - ${ev.end})`);
+            });
+          }
+        });
+      }
+      
       const loading = document.getElementById("loading");
       const container = document.getElementById("scheduleContainer");
       
@@ -391,16 +425,26 @@
               return { year, month: month - 1, day }; // monthは0ベース
             }
             
-            // イベント開始日時のJST日付を取得
-            const eventJSTDate = getJSTDate(ev.start);
-            const eventDateStr = `${eventJSTDate.year}-${String(eventJSTDate.month + 1).padStart(2, '0')}-${String(eventJSTDate.day).padStart(2, '0')}`;
+            // イベント開始日時と終了日時のJST日付を取得
+            const eventStartJSTDate = getJSTDate(ev.start);
+            const eventEndJSTDate = getJSTDate(ev.end);
             
-            console.log(`Event JST date: ${eventDateStr}`);
+            const eventStartDateStr = `${eventStartJSTDate.year}-${String(eventStartJSTDate.month + 1).padStart(2, '0')}-${String(eventStartJSTDate.day).padStart(2, '0')}`;
+            const eventEndDateStr = `${eventEndJSTDate.year}-${String(eventEndJSTDate.month + 1).padStart(2, '0')}-${String(eventEndJSTDate.day).padStart(2, '0')}`;
+            
+            console.log(`Event JST date range: ${eventStartDateStr} to ${eventEndDateStr}`);
             console.log(`Should show on: ${selectedDateStr}`);
             
-            // 選択された日付と比較
-            if (eventDateStr !== selectedDateStr) {
-              console.log(`Skipping event "${ev.summary}" - different date (${eventDateStr} !== ${selectedDateStr})`);
+            // イベントが選択された日付と重なるかチェック
+            // 1. イベントが選択日に開始する
+            // 2. イベントが選択日に終了する
+            // 3. イベントが選択日をまたぐ（複数日にまたがるイベント）
+            const showEvent = eventStartDateStr === selectedDateStr || 
+                             eventEndDateStr === selectedDateStr ||
+                             (eventStartDateStr < selectedDateStr && eventEndDateStr > selectedDateStr);
+            
+            if (!showEvent) {
+              console.log(`Skipping event "${ev.summary}" - not on selected date`);
               return;
             }
             
@@ -411,8 +455,24 @@
             // Debug time info
             console.log(`Time info (JST) for "${ev.summary}": ${timeInfo.startHour}:${String(timeInfo.startMinute).padStart(2, '0')} - ${timeInfo.endHour}:${String(timeInfo.endMinute).padStart(2, '0')}`);
             
-            // Skip events outside display range
-            if (timeInfo.endHour < 7 || timeInfo.startHour > 20) return;
+            // 終日イベントの特別処理
+            const isAllDay = (timeInfo.startHour === 0 && timeInfo.startMinute === 0 && 
+                             timeInfo.endHour === 23 && timeInfo.endMinute === 59);
+            
+            if (isAllDay) {
+              console.log(`All-day event detected: "${ev.summary}"`);
+              // 終日イベントは7:00-20:00の範囲全体に表示
+              timeInfo.startHour = 7;
+              timeInfo.endHour = 20;
+              timeInfo.startMinute = 0;
+              timeInfo.endMinute = 0;
+            }
+            
+            // Skip events outside display range (終日イベント以外)
+            if (!isAllDay && (timeInfo.endHour < 7 || timeInfo.startHour > 20)) {
+              console.log(`Skipping event "${ev.summary}" - outside display range (7:00-20:00)`);
+              return;
+            }
             
             // Adjust for display range
             const adjustedEvent = {
