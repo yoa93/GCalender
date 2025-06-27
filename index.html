@@ -242,29 +242,43 @@
         return { startHour: 0, endHour: 23, startMinute: 0, endMinute: 59 };
       }
       
-      // より確実な方法で日本時間を取得
-      // JST = UTC + 9時間
-      const jstOffset = 9 * 60; // 分単位
+      // Intl.DateTimeFormatを使用して確実に日本時間を取得
+      const options = {
+        timeZone: 'Asia/Tokyo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false // 24時間表記
+      };
       
-      // getTimezoneOffset()は現地時間とUTCの差を分単位で返す（JSTの場合-540）
-      const localOffset = new Date().getTimezoneOffset();
-      const totalOffset = jstOffset + localOffset;
+      const startJSTStr = new Intl.DateTimeFormat('ja-JP', options).format(start);
+      const endJSTStr = new Intl.DateTimeFormat('ja-JP', options).format(end);
       
-      // JSTでの時刻を計算
-      const startJST = new Date(start.getTime() + totalOffset * 60 * 1000);
-      const endJST = new Date(end.getTime() + totalOffset * 60 * 1000);
+      // 時刻部分を抽出 (format: "YYYY/MM/DD HH:mm:ss")
+      const startMatch = startJSTStr.match(/(\d{2}):(\d{2}):(\d{2})$/);
+      const endMatch = endJSTStr.match(/(\d{2}):(\d{2}):(\d{2})$/);
+      
+      if (!startMatch || !endMatch) {
+        console.warn(`Failed to parse JST time: start=${startJSTStr}, end=${endJSTStr}`);
+        return { startHour: 0, endHour: 23, startMinute: 0, endMinute: 59 };
+      }
+      
+      const result = {
+        startHour: parseInt(startMatch[1], 10),
+        endHour: parseInt(endMatch[1], 10),
+        startMinute: parseInt(startMatch[2], 10),
+        endMinute: parseInt(endMatch[2], 10)
+      };
       
       // デバッグ情報
-      console.log(`Original times: start=${eventStart}, end=${eventEnd}`);
-      console.log(`JST converted: start=${startJST.toISOString()}, end=${endJST.toISOString()}`);
-      console.log(`JST hours: start=${startJST.getUTCHours()}:${startJST.getUTCMinutes()}, end=${endJST.getUTCHours()}:${endJST.getUTCMinutes()}`);
+      console.log(`Event times - Original: ${eventStart} to ${eventEnd}`);
+      console.log(`Event times - JST: ${startJSTStr} to ${endJSTStr}`);
+      console.log(`Event times - Parsed: ${result.startHour}:${String(result.startMinute).padStart(2, '0')} to ${result.endHour}:${String(result.endMinute).padStart(2, '0')}`);
       
-      return {
-        startHour: startJST.getUTCHours(),
-        endHour: endJST.getUTCHours(),
-        startMinute: startJST.getUTCMinutes(),
-        endMinute: endJST.getUTCMinutes()
-      };
+      return result;
     }
 
     function calculateEventPosition(event, cellWidth = 120) {
@@ -419,10 +433,19 @@
             // 日本時間での日付を取得する関数
             function getJSTDate(dateStr) {
               const date = new Date(dateStr);
-              // JSTでの年月日を取得
-              const jstStr = date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
-              const [datePartJST] = jstStr.split(' ');
-              const [year, month, day] = datePartJST.split('/').map(num => parseInt(num, 10));
+              
+              // Intl.DateTimeFormatを使用して日本時間の日付を取得
+              const options = {
+                timeZone: 'Asia/Tokyo',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+              };
+              
+              const jstDateStr = new Intl.DateTimeFormat('ja-JP', options).format(date);
+              // Format: "YYYY/MM/DD"
+              const [year, month, day] = jstDateStr.split('/').map(num => parseInt(num, 10));
+              
               return { year, month: month - 1, day }; // monthは0ベース
             }
             
