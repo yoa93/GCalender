@@ -486,17 +486,30 @@
               }
             }
             
-            // Adjust for display range
+            // Adjust for display range (only adjust events that extend outside 7:00-20:00)
             const adjustedEvent = {
               ...ev,
               timeInfo: {
-                ...timeInfo,
-                startHour: Math.max(timeInfo.startHour, 7),
-                endHour: Math.min(timeInfo.endHour, 20),
-                startMinute: timeInfo.startHour < 7 ? 0 : timeInfo.startMinute,
-                endMinute: timeInfo.endHour > 20 ? 0 : timeInfo.endMinute
+                startHour: timeInfo.startHour,
+                endHour: timeInfo.endHour,
+                startMinute: timeInfo.startMinute,
+                endMinute: timeInfo.endMinute
               }
             };
+            
+            // Only adjust if event starts before 7:00
+            if (timeInfo.startHour < 7) {
+              adjustedEvent.timeInfo.startHour = 7;
+              adjustedEvent.timeInfo.startMinute = 0;
+              console.log(`Adjusted start time for "${ev.summary}" from ${timeInfo.startHour}:${timeInfo.startMinute} to 7:00`);
+            }
+            
+            // Only adjust if event ends after 20:00
+            if (timeInfo.endHour > 20 || (timeInfo.endHour === 20 && timeInfo.endMinute > 0)) {
+              adjustedEvent.timeInfo.endHour = 20;
+              adjustedEvent.timeInfo.endMinute = 0;
+              console.log(`Adjusted end time for "${ev.summary}" from ${timeInfo.endHour}:${timeInfo.endMinute} to 20:00`);
+            }
             
             const position = calculateEventPosition(adjustedEvent);
             console.log(`Position for "${ev.summary}": left=${position.left}px, width=${position.width}px`);
@@ -514,9 +527,11 @@
             eventDiv.style.width = `${position.width - 8}px`; // -8 for padding/margin
             eventDiv.style.top = `${ev.overlapLevel * 35}px`; // 35px vertical offset per overlap level
             
-            // 時間表示
-            const startTime = `${timeInfo.startHour.toString().padStart(2, '0')}:${timeInfo.startMinute.toString().padStart(2, '0')}`;
-            const endTime = `${timeInfo.endHour.toString().padStart(2, '0')}:${timeInfo.endMinute.toString().padStart(2, '0')}`;
+            // 時間表示（元の時刻を表示）
+            const displayStartHour = timeInfo.startHour;
+            const displayEndHour = timeInfo.endHour;
+            const startTime = `${displayStartHour.toString().padStart(2, '0')}:${timeInfo.startMinute.toString().padStart(2, '0')}`;
+            const endTime = `${displayEndHour.toString().padStart(2, '0')}:${timeInfo.endMinute.toString().padStart(2, '0')}`;
             
             const timeDiv = document.createElement("div");
             timeDiv.className = "event-time";
